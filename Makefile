@@ -10,3 +10,6 @@ infra_up:
 
 infra_down:
 	echo "yes" | terraform destroy infra/
+
+build_docker:
+	docker build -t $(IMAGE_NAME) .
