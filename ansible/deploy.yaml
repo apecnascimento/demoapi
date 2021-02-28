@@ -1,0 +1,97 @@
+---
+- hosts: all
+  become: true
+  vars:
+    host: "{{ dns | default(ansible_ssh_host+'.xip.io') }}"
+    acme_email: "{{ email | default('localtest@xip.io') }}"
+    app_image: "{{ docker_image | default('containous/whoami') }}"
+
+  tasks:
+    - name: Install packages to allow apt to use a repository over HTTPS
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg-agent
+          - software-properties-common
+        state: present
+
+    - name: Add Docker’s official GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ansible_distribution_release}} stable"
+        state: present
+
+
+    - name: Install docker
+      apt:
+        name:
+          - python3-pip
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose
+        state: present
+
+    - name: Check previos version
+      stat:
+        path: ./my_docker_app/docker-compose.yaml
+      register: old_version_file
+
+    - debug:
+        var: old_version_file
+
+    - name: TearDown old version
+      shell:
+        cmd: "docker-compose -f ./my_docker_app/docker-compose.yaml down -v --rmi=all"
+      when: old_version_file.stat.exists
+
+    - name: Remove old version
+      file:
+        path: "./my_docker_app/docker-compose.yaml"
+        state: absent
+      when: old_version_file.stat.exists
+
+    - name: Create app directory
+      file:
+        path: ./my_docker_app
+        state: directory
+
+    - name: Copy docker-compose.yaml
+      template:
+        src: templates/docker-compose.j2
+        dest: ./my_docker_app/docker-compose.yaml
+
+    - name: Create acme.json
+      file:
+        path: ./my_docker_app/acme.json
+        state: touch
+        mode: "0600"
+
+
+    - name: Create webserver docker network
+      shell:
+        cmd: "docker network create web"
+      ignore_errors: true
+
+    - name: Up new version
+      shell:
+        cmd: "docker-compose -f ./my_docker_app/docker-compose.yaml up -d"
+
+    - name: Check containers
+      shell:
+        cmd: "docker container ls --format 'Container: {{ '{{' }}.Image{{ '}}'}} - Status: {{ '{{' }}.Status{{ '}}'}} --  '"
+      register: output
+
+    - debug:
+        var: output.stdout
+
+    - debug:
+        msg: "Check in your browser https://{{ host }}"
+
+
