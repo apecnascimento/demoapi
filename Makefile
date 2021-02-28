@@ -13,3 +13,9 @@ infra_down:
 
 build_docker:
 	docker build -t $(IMAGE_NAME) .
+
+
+deploy:
+	cp ./ansible/deployer.pem ~/.ssh/deployer.pem
+	chmod 0600 ~/.ssh/deployer.pem
+	ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook ./ansible/deploy.yaml -i ./ansible/inventory -u ubuntu --key-file "~/.ssh/deployer.pem" $(ARGS)
